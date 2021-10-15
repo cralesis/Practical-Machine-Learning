@@ -1,0 +1,148 @@
+---
+title: "Practical Machine Learning"
+author: "Cristina Rider"
+date: "10/12/2021"
+output: html_document
+---
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset)."
+
+## Data
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. The information has been generously provided for use use in this cousera course by the authors, Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. They have allowed the use of their paper “Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human ’13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+# Choosing the prediction algorithm
+
+Steps Taken
+
+1. Tidy data. Remove columns with little/no data.
+
+2. Create training and test data from training data for cross validation checking.
+
+3. Trial 3 methods Random Forrest, Gradient Boosted Model and Linear Discriminant Analysis.
+
+4. Fine tune model through combinations of above methods, reduction of input variables or similar. The fine tuning will take into account accuracy first and speed of analysis second.
+
+```{r}
+## install.packages("pacman")
+pacman::p_load(ggplot2, caret, randomForest, gbm, e1071, doParallel, survival, splines, plyr, dplyr)
+```
+
+# Load Data
+
+1. Load the data
+2. Remove #DIV/0!, replace with NA
+
+```{r}
+## Load data
+training <- read.csv("C:/Users/cristina.rider/Desktop/Training/Kaggle/pml_training.csv", na.strings=c("#DIV/0!", "NA", ""), row.names = 1)
+testing <- read.csv("C:/Users/cristina.rider/Desktop/Training/Kaggle/pml_testing.csv", na.strings=c("#DIV/0!", "NA", ""), row.names = 1)
+
+# remove columns with >95% missing values
+training <- training[, which(colMeans(!is.na(training)) > .95)]
+testing <- testing[, which(colMeans(!is.na(testing)) > .95)]
+
+# remove irrelevant columns
+training <- training[, -c(1:7)]
+testing <- testing[, -c(1:7)]
+
+#Partition training into 75% train and 25% validation
+inTrain <- createDataPartition(training$classe, p = 0.75, list = F)
+trainingset <- training[inTrain, ]
+validationset <- training[-inTrain, ]
+
+
+plot(x = trainingset$classe, col="yellow", main="Plot of levels of variable classe within the Training Set data set", xlab="classe", ylab="Frequency")
+
+
+#Train 3 different models
+mod1 <- train(classe ~ ., data=trainingset, method="rf")
+#mod2 <- train(classe ~ ., data=trainingset, method="gbm")
+#mod3 <- train(classe ~ ., data=trainingset, method="lda")
+
+pred1 <- predict(mod1, validationset)
+#pred2 <- predict(mod2, validationset)
+#pred3 <- predict(mod3, validationset)
+
+#show confusion matrices
+
+#99.5% accuracy
+confusionMatrix(pred1, validationset$classe)
+#96% accuracy 
+#confusionMatrix(pred2, validationset$classe)
+#69% accuracy
+#confusionMatrix(pred3, validationset$classe)
+
+#Create Combination Model
+#predDF <- data.frame(pred1, pred2, pred3, classe=validationset$classe)
+#predDF <- data.frame(pred1, pred2, classe=validationset$classe)
+#combModFit <- train(classe ~ ., method="rf", data=predDF)
+
+#in-sample error
+#combPredIn <- predict(combModFit, predDF)
+#confusionMatrix(combPredIn, predDF$classe)
+
+#out-of-sample error
+
+```
+
+Based on results, the Random Forest prediction was far better than either the GBM or lsa models. The RF model will be used as the sole prediction model. The confusion matrix created gives an accuracy of 99.5%. This is excellent.
+
+As a double check the out of sample error was calculated (.005). 
+
+# Fine Tuning
+
+Assess Number of relevant variables
+
+```{r}
+varImpRF <- mod1
+
+varImpObj <- varImp(varImpRF)
+# Top 40 plot
+#plot(varImpObj, main = "Importance of Top 40 Variables", top = 40)
+
+# Top 25 plot
+plot(varImpObj, main = "Importance of Top 25 Variables", top = 25)
+```
+
+## Conclusion
+
+I stopped at this stage as the goal to be able to get the required answers and report the errors achieved with the model has been reached without any further fine tuning.
+
+The Random Forest method worked very well.
+
+The Confusion Matrix achieved 99.5% accuracy. The Out of Sample Error achieved .005.
+
+This model will be used for the final calculations.
+
+The logic behind using the random forest method as the predictor rather than other methods or a combination of various methods is:
+
+1. Random forests are suitable when to handling a large number of inputs, especially when the interactions between variables are unknown.
+2. Random forest’s built in cross-validation component that gives an unbiased estimate of the forest’s out-of-sample (or bag) (OOB) error rate.
+3. A Random forest can handle unscaled variables and categorical variables. This is more forgiving with the cleaning of the data.
+
+# Prepare the submission
+
+```{r}
+pml_write_files = function(x){
+n = length(x)
+for(i in 1:n){
+filename = paste0("problem_id_",i,".txt")
+write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+}
+}
+x <- testing
+answers <- predict(mod1, newdata=x)
+answers
+pml_write_files(answers)
+```
